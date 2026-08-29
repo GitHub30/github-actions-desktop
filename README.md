@@ -5,3 +5,9 @@
 
 # GitHub Actions Desktop
 
+## Usage
+
+1. Fork this repository
+2. Open [Desktop](../../actions/workflows/desktop.yml) Workflow
+3. Run workflow
+4. Open Desktop url
