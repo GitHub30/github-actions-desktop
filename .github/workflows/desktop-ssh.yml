@@ -25,7 +25,7 @@ jobs:
 
       - name: SSH URL https://sshx.io/s/<random-session>
         background: true
-        run: curl -sSf https://sshx.io/get | sh -s run
+        run: curl -sSf https://sshx.io/get | sh -s run &
 
       - name: Desktop URL https://<random-subdomain>.trycloudflare.com
         run: |
