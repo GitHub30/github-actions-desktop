@@ -16,10 +16,13 @@ jobs:
             --shm-size=1gb \
             --restart unless-stopped \
             ghcr.io/linuxserver/webtop
+
       - name: Set up WARP connection
+        background: true
         uses: sebst/actions-warp@v1
         with:
           tos: YES
+
       - name: Desktop URL https://<random-subdomain>.trycloudflare.com
         run: |
           wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
