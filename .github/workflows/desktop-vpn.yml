@@ -1,0 +1,36 @@
+name: Desktop VPN
+
+on:
+  workflow_dispatch:
+
+jobs:
+  desktop:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Start Docker
+        background: true
+        run: |
+          docker run -d \
+            --network host \
+            --security-opt seccomp=unconfined \
+            --shm-size=1gb \
+            --restart unless-stopped \
+            ghcr.io/linuxserver/webtop
+
+      - name: Start VPN
+        background: true
+        run: |
+          # https://pkg.cloudflareclient.com/#ubuntu
+          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+          sudo apt-get update
+          sudo apt-get install -y cloudflare-warp
+          sudo warp-cli --accept-tos registration new
+          sudo warp-cli --accept-tos connect
+          curl https://www.cloudflare.com/cdn-cgi/trace
+
+      - name: Desktop URL https://<random-subdomain>.trycloudflare.com
+        run: |
+          wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared-linux-amd64.deb >/dev/null 2>&1
+          cloudflared tunnel --url http://localhost:3000
