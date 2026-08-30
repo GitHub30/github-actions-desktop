@@ -1,4 +1,4 @@
-name: Desktop
+name: Desktop SSH
 
 on:
   workflow_dispatch:
