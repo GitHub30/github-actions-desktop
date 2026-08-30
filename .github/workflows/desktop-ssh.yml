@@ -17,6 +17,9 @@ jobs:
             --restart unless-stopped \
             ghcr.io/linuxserver/webtop
 
+      - name: Setup upterm session
+        uses: owenthereal/action-upterm@v1
+
       - name: SSH URL https://<random-subdomain>.sshx.io
         background: true
         run: curl -sSf https://sshx.io/get | sh -s run
