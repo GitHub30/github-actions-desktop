@@ -17,17 +17,59 @@ jobs:
             --restart unless-stopped \
             ghcr.io/linuxserver/webtop
 
-      - name: Start VPN
-        background: true
+      - name: Start VPN and collect warp diagnostics
         run: |
+          set -euxo pipefail
+
           # https://pkg.cloudflareclient.com/#ubuntu
           curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
           echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
           sudo apt-get update
           sudo apt-get install -y cloudflare-warp
-          sudo warp-cli --accept-tos registration new
-          sudo warp-cli --accept-tos connect
-          curl https://www.cloudflare.com/cdn-cgi/trace
+
+          # Try registration/connect but don't fail the job solely because warp failed here
+          sudo warp-cli --accept-tos registration new || true
+          sudo warp-cli --accept-tos connect || true
+
+          # Immediate diagnostics to help debugging on runners where TUN/WG may be restricted
+          echo "=== warp-cli status ==="
+          sudo warp-cli --status || true
+
+          echo "=== systemctl status warp-svc ==="
+          sudo systemctl status warp-svc --no-pager || true
+
+          echo "=== journalctl -u warp-svc (last 200 lines) ==="
+          sudo journalctl -u warp-svc --no-pager -n 200 || true
+
+          echo "=== ip addr (tun/wg) ==="
+          ip a || true
+
+          echo "=== lsmod (wireguard) ==="
+          sudo lsmod | grep wireguard || true
+
+          echo "=== routing table ==="
+          ip route || true
+          ip rule || true
+
+          # Save combined diagnostics to a file for upload
+          {
+            echo "==== warp-cli --status ===="; sudo warp-cli --status || true
+            echo "==== systemctl status warp-svc ===="; sudo systemctl status warp-svc --no-pager || true
+            echo "==== journalctl warp-svc ===="; sudo journalctl -u warp-svc --no-pager -n 200 || true
+            echo "==== ip a ===="; ip a || true
+            echo "==== lsmod ===="; sudo lsmod | grep -E 'wireguard|tun' || true
+            echo "==== ip route ===="; ip route || true
+            echo "==== ip rule ===="; ip rule || true
+          } > /tmp/warp-diagnostics.log 2>&1 || true
+
+          # Try a curl with retries so we get more robust info
+          curl --retry 5 --retry-delay 5 --max-time 30 -v https://www.cloudflare.com/cdn-cgi/trace || true
+
+      - name: Upload warp diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: warp-diagnostics
+          path: /tmp/warp-diagnostics.log
 
       - name: Desktop URL https://<random-subdomain>.trycloudflare.com
         run: |
