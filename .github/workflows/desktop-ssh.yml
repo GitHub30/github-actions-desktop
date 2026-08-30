@@ -1,0 +1,27 @@
+name: Desktop
+
+on:
+  workflow_dispatch:
+
+jobs:
+  desktop:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Start Docker
+        background: true
+        run: |
+          docker run -d \
+            --network host \
+            --security-opt seccomp=unconfined \
+            --shm-size=1gb \
+            --restart unless-stopped \
+            ghcr.io/linuxserver/webtop
+
+      - name: SSH URL https://<random-subdomain>.sshx.io
+        run: curl -sSf https://sshx.io/get | sh -s run
+
+      - name: Desktop URL https://<random-subdomain>.trycloudflare.com
+        run: |
+          wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared-linux-amd64.deb >/dev/null 2>&1
+          cloudflared tunnel --url http://localhost:3000
