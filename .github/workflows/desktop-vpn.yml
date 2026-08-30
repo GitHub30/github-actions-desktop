@@ -21,50 +21,52 @@ jobs:
         run: |
           set -euxo pipefail
 
-          # https://pkg.cloudflareclient.com/#ubuntu
+          # install
           curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
           echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
           sudo apt-get update
           sudo apt-get install -y cloudflare-warp
 
-          # Try registration/connect but don't fail the job solely because warp failed here
+          # try register/connect but don't fail the job if these fail
           sudo warp-cli --accept-tos registration new || true
           sudo warp-cli --accept-tos connect || true
 
-          # Immediate diagnostics to help debugging on runners where TUN/WG may be restricted
-          echo "=== warp-cli status ==="
-          sudo warp-cli --status || true
+          # Diagnostics (corrected commands)
+          echo "==== warp-cli help ===="; sudo warp-cli --help || true
+          echo "==== warp-cli status ===="; sudo warp-cli status || true
 
-          echo "=== systemctl status warp-svc ==="
-          sudo systemctl status warp-svc --no-pager || true
+          echo "==== systemctl status warp-svc ===="; sudo systemctl status warp-svc --no-pager || true
+          echo "==== journalctl warp-svc (last 500 lines) ===="; sudo journalctl -u warp-svc --no-pager -n 500 || true
 
-          echo "=== journalctl -u warp-svc (last 200 lines) ==="
-          sudo journalctl -u warp-svc --no-pager -n 200 || true
+          echo "==== /dev/net/tun ===="; ls -l /dev/net/tun || true
+          echo "==== lsmod ===="; sudo lsmod | egrep 'wireguard|tun' || true
+          echo "==== ip a ===="; ip a || true
+          echo "==== ip route ===="; ip route || true
+          echo "==== ip rule ===="; ip rule || true
 
-          echo "=== ip addr (tun/wg) ==="
-          ip a || true
+          echo "==== nft ruleset ===="; sudo nft list ruleset || true
+          echo "==== iptables nat ===="; sudo iptables -t nat -L -n -v || true
+          echo "==== ss -tunlp ===="; sudo ss -tunlp || true
 
-          echo "=== lsmod (wireguard) ==="
-          sudo lsmod | grep wireguard || true
-
-          echo "=== routing table ==="
-          ip route || true
-          ip rule || true
-
-          # Save combined diagnostics to a file for upload
+          # Save all diagnostics
           {
-            echo "==== warp-cli --status ===="; sudo warp-cli --status || true
-            echo "==== systemctl status warp-svc ===="; sudo systemctl status warp-svc --no-pager || true
-            echo "==== journalctl warp-svc ===="; sudo journalctl -u warp-svc --no-pager -n 200 || true
-            echo "==== ip a ===="; ip a || true
-            echo "==== lsmod ===="; sudo lsmod | grep -E 'wireguard|tun' || true
-            echo "==== ip route ===="; ip route || true
-            echo "==== ip rule ===="; ip rule || true
+            date
+            echo '==== warp-cli --help ===='; sudo warp-cli --help || true
+            echo '==== warp-cli status ===='; sudo warp-cli status || true
+            echo '==== systemctl status warp-svc ===='; sudo systemctl status warp-svc --no-pager || true
+            echo '==== journalctl warp-svc ===='; sudo journalctl -u warp-svc --no-pager -n 500 || true
+            echo '==== /dev/net/tun ===='; ls -l /dev/net/tun || true
+            echo '==== lsmod ===='; sudo lsmod | egrep \"wireguard|tun\" || true
+            echo '==== ip a ===='; ip a || true
+            echo '==== ip route ===='; ip route || true
+            echo '==== ip rule ===='; ip rule || true
+            echo '==== nft ruleset ===='; sudo nft list ruleset || true
+            echo '==== iptables nat ===='; sudo iptables -t nat -L -n -v || true
+            echo '==== ss -tunlp ===='; sudo ss -tunlp || true
           } > /tmp/warp-diagnostics.log 2>&1 || true
 
-          # Try a curl with retries so we get more robust info
+          # try curl with verbose and retries
           curl --retry 5 --retry-delay 5 --max-time 30 -v https://www.cloudflare.com/cdn-cgi/trace || true
-
       - name: Upload warp diagnostics
         uses: actions/upload-artifact@v4
         with:
