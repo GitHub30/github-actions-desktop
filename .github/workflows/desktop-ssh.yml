@@ -20,6 +20,8 @@ jobs:
       - name: ssh <random-session>@uptermd.upterm.dev
         background: true
         uses: owenthereal/action-upterm@v1
+        with:
+          detached: true
 
       - name: SSH URL https://sshx.io/s/<random-session>
         background: true
