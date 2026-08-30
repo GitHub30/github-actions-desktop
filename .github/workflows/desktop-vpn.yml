@@ -7,11 +7,11 @@ jobs:
   desktop:
     runs-on: ubuntu-latest
     steps:
-      - name: Start Docker
-        background: true
+      - name: Start Docker webtop
         run: |
           docker run -d \
-            --network host \
+            --rm \
+            -p 3000:3000 \
             --security-opt seccomp=unconfined \
             --shm-size=1gb \
             --restart unless-stopped \
@@ -21,52 +21,65 @@ jobs:
         run: |
           set -euxo pipefail
 
-          # install
+          # Install Cloudflare WARP
           curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
           echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
           sudo apt-get update
           sudo apt-get install -y cloudflare-warp
 
-          # try register/connect but don't fail the job if these fail
+          # Try registration/connect but don't fail the job solely because warp failed here
           sudo warp-cli --accept-tos registration new || true
           sudo warp-cli --accept-tos connect || true
 
-          # Diagnostics (corrected commands)
-          echo "==== warp-cli help ===="; sudo warp-cli --help || true
+          # Basic warp CLI outputs
+          echo "==== warp-cli --help ===="; sudo warp-cli --help || true
           echo "==== warp-cli status ===="; sudo warp-cli status || true
+          echo "==== warp-cli debug network ===="; sudo warp-cli debug network || true
+          echo "==== warp-cli tunnel stats ===="; sudo warp-cli tunnel stats || true
 
-          echo "==== systemctl status warp-svc ===="; sudo systemctl status warp-svc --no-pager || true
-          echo "==== journalctl warp-svc (last 500 lines) ===="; sudo journalctl -u warp-svc --no-pager -n 500 || true
-
+          # Device and kernel inspection
+          echo "==== /dev/net ===="; ls -l /dev/net || true
           echo "==== /dev/net/tun ===="; ls -l /dev/net/tun || true
-          echo "==== lsmod ===="; sudo lsmod | egrep 'wireguard|tun' || true
+          echo "==== try modprobe tun ===="; sudo modprobe tun || true
+          echo "==== lsmod (wireguard|tun) ===="; sudo lsmod | egrep 'wireguard|tun' || true
+          echo "==== dmesg tail ===="; dmesg | tail -n 100 || true
+
+          # Network and firewall
           echo "==== ip a ===="; ip a || true
           echo "==== ip route ===="; ip route || true
           echo "==== ip rule ===="; ip rule || true
-
+          echo "==== ss -tunlp ===="; sudo ss -tunlp || true
           echo "==== nft ruleset ===="; sudo nft list ruleset || true
           echo "==== iptables nat ===="; sudo iptables -t nat -L -n -v || true
-          echo "==== ss -tunlp ===="; sudo ss -tunlp || true
 
-          # Save all diagnostics
+          # Warp service logs
+          echo "==== systemctl status warp-svc ===="; sudo systemctl status warp-svc --no-pager || true
+          echo "==== journalctl warp-svc (last 500 lines) ===="; sudo journalctl -u warp-svc --no-pager -n 500 || true
+
+          # Save all diagnostics to artifact
           {
             date
             echo '==== warp-cli --help ===='; sudo warp-cli --help || true
             echo '==== warp-cli status ===='; sudo warp-cli status || true
-            echo '==== systemctl status warp-svc ===='; sudo systemctl status warp-svc --no-pager || true
-            echo '==== journalctl warp-svc ===='; sudo journalctl -u warp-svc --no-pager -n 500 || true
+            echo '==== warp-cli debug network ===='; sudo warp-cli debug network || true
+            echo '==== warp-cli tunnel stats ===='; sudo warp-cli tunnel stats || true
+            echo '==== /dev/net ===='; ls -l /dev/net || true
             echo '==== /dev/net/tun ===='; ls -l /dev/net/tun || true
-            echo '==== lsmod ===='; sudo lsmod | egrep \"wireguard|tun\" || true
+            echo '==== modprobe tun ===='; sudo modprobe tun || true
+            echo '==== lsmod ===='; sudo lsmod | egrep "wireguard|tun" || true
+            echo '==== dmesg tail ===='; dmesg | tail -n 100 || true
             echo '==== ip a ===='; ip a || true
             echo '==== ip route ===='; ip route || true
             echo '==== ip rule ===='; ip rule || true
+            echo '==== ss -tunlp ===='; sudo ss -tunlp || true
             echo '==== nft ruleset ===='; sudo nft list ruleset || true
             echo '==== iptables nat ===='; sudo iptables -t nat -L -n -v || true
-            echo '==== ss -tunlp ===='; sudo ss -tunlp || true
+            echo '==== journalctl warp-svc ===='; sudo journalctl -u warp-svc --no-pager -n 500 || true
           } > /tmp/warp-diagnostics.log 2>&1 || true
 
-          # try curl with verbose and retries
+          # Try a curl with retries to observe connectivity
           curl --retry 5 --retry-delay 5 --max-time 30 -v https://www.cloudflare.com/cdn-cgi/trace || true
+
       - name: Upload warp diagnostics
         uses: actions/upload-artifact@v4
         with:
@@ -76,5 +89,8 @@ jobs:
       - name: Desktop URL https://<random-subdomain>.trycloudflare.com
         run: |
           wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-          sudo dpkg -i cloudflared-linux-amd64.deb >/dev/null 2>&1
-          cloudflared tunnel --url http://localhost:3000
+          sudo dpkg -i cloudflared-linux-amd64.deb >/dev/null 2>&1 || true
+          # Start cloudflared in background and print log
+          nohup cloudflared tunnel --url http://127.0.0.1:3000 >/tmp/cloudflared.log 2>&1 &
+          sleep 3
+          tail -n +1 /tmp/cloudflared.log || true
