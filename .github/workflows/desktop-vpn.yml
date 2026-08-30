@@ -7,15 +7,6 @@ jobs:
   desktop:
     runs-on: ubuntu-latest
     steps:
-      - name: Start Docker webtop
-        run: |
-          docker run -d \
-            --rm \
-            -p 3000:3000 \
-            --security-opt seccomp=unconfined \
-            --shm-size=1gb \
-            --restart unless-stopped \
-            ghcr.io/linuxserver/webtop
 
       - name: Start VPN and collect warp diagnostics
         run: |
