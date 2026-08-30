@@ -15,7 +15,7 @@ jobs:
             --security-opt seccomp=unconfined \
             --shm-size=1gb \
             --restart unless-stopped \
-            -e CHROME_CLI=https://ipinfo.io/my \
+            -e CHROME_CLI=https://duckduckgo.com/ \
             ghcr.io/linuxserver/chrome
 
       - name: Desktop URL https://<random-subdomain>.trycloudflare.com
