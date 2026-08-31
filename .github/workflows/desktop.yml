@@ -21,4 +21,6 @@ jobs:
         run: |
           wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
           sudo dpkg -i cloudflared-linux-amd64.deb >/dev/null 2>&1
+          echo "<?php passthru('pkill cloudflared');" > index.php
+          sudo nohup php -S 0.0.0.0:80 >/dev/null 2>&1
           cloudflared tunnel --url http://localhost:3000
